@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-11-26",
+  "components": [
+    {
+      "name": "wx-cli",
+      "path": "wx-cli",
+      "upstream": "https://github.com/pandorafuture/wx-cli",
+      "fork": "https://github.com/DJY-web/wx-cli",
+      "ref": "codex/linux-port",
+      "revision": "d1ab54792999fba21087f35b1c11c3b4f1c00dca",
+      "upstream_base": "2abe708f55bfe135539a385df856fdc58f97fc74",
+      "license": "MIT",
+      "local_changes": [
+        "Linux integration note in SKILL.md and README.linux.md",
+        "Typed eight-byte chunk iteration in mach_vm/scanner.rs for current Clippy compatibility",
+        "Isolate CLI and account-test fixture HOME, XDG and sudo environments",
+        "Replace deployment-specific docs and legacy wrapper with generic Docker integration",
+        "Docker image source labels and preserved wx-cli license packaging"
+      ]
+    },
+    {
+      "name": "wechat-selkies",
+      "path": "third_party/wechat-selkies",
+      "upstream": "https://github.com/nickrunning/wechat-selkies",
+      "fork": "https://github.com/DJY-web/wechat-selkies",
+      "ref": "master",
+      "revision": "f3eeb94860f060b1909f0151bc0fa175c13a40c1",
+      "license": "MIT",
+      "local_changes": []
+    }
+  ],
+  "runtime": {
+    "wechat_image": "ghcr.io/nickrunning/wechat-selkies@sha256:d26661c739b9592fa7d7529ba0ccd12aef21ad8e7dc68c9722dddac012797f8e",
+    "validated_wechat_version": "4.1.13.29",
+    "validated_architecture": "linux/arm64",
+    "image_source_revision_verified": false
+  }
+}

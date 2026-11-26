@@ -1,0 +1,192 @@
+name: Issue Validation
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  validate-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Issue Title Length
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.trim();
+            const minTitleLength = 10;
+            const maxTitleLength = 120;
+            
+            console.log(`Issue title: "${title}"`);
+            console.log(`Title length: ${title.length}`);
+            
+            // 去除模板前缀进行长度检查
+            const cleanTitle = title.replace(/^\[(Bug|Feature|General)\]:\s*/i, '').trim();
+            
+            if (cleanTitle.length < minTitleLength) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `⚠️ **标题过短**\n\n您的issue标题内容太短了（当前有效内容${cleanTitle.length}个字符，最少需要${minTitleLength}个字符）。请提供一个更具描述性的标题，以便我们更好地理解问题。\n\n**示例：**\n- ✅ "[Bug]: 微信无法启动显示黑屏"\n- ❌ "[Bug]: 有问题"\n\n请编辑issue标题，提供更多详细信息。`
+              });
+              
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['needs-more-info']
+              });
+            } else if (title.length > maxTitleLength) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `⚠️ **标题过长**\n\n您的issue标题太长了（当前${title.length}个字符，建议不超过${maxTitleLength}个字符）。请简化标题，将详细信息移至描述部分。`
+              });
+            }
+
+      - name: Check Issue Body Length
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body ? issue.body.trim() : '';
+            const minBodyLength = 50;
+            
+            console.log(`Issue body length: ${body.length}`);
+            
+            if (body.length < minBodyLength) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `⚠️ **描述过短**\n\n您的issue描述太简短了（当前${body.length}个字符，最少需要${minBodyLength}个字符）。为了帮助我们更好地理解和解决问题，请提供以下信息：\n\n- 详细的问题描述\n- 重现步骤\n- 预期行为\n- 实际行为\n- 环境信息（操作系统、浏览器、Docker版本等）\n- 相关日志或错误信息\n\n请编辑issue描述，添加更多详细信息。`
+              });
+              
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['needs-more-info']
+              });
+            }
+
+      - name: Check for Template Usage
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+            
+            // 检查是否包含模板中的占位符文本（表明用户没有填写完整）
+            const templatePlaceholders = [
+              '例如：',
+              'placeholder',
+              '...',
+              '请描述',
+              '请填写',
+              '请提供'
+            ];
+            
+            const hasPlaceholders = templatePlaceholders.some(placeholder => 
+              body.toLowerCase().includes(placeholder)
+            );
+            
+            if (hasPlaceholders) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `⚠️ **模板未完整填写**\n\n看起来您可能没有完全填写issue模板。请确保：\n\n- 删除所有占位符文本和示例\n- 填写所有必需的字段\n- 提供真实的、具体的信息\n\n这将帮助我们更快地理解和解决您的问题。`
+              });
+              
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['needs-more-info']
+              });
+            }
+
+      - name: Auto-assign Labels Based on Content
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const content = title + ' ' + body;
+            
+            const labelRules = [
+              {
+                keywords: ['docker', 'dockerfile', 'compose', '容器'],
+                label: 'docker'
+              },
+              {
+                keywords: ['微信', 'wechat', '登录', 'login'],
+                label: 'wechat'
+              },
+              {
+                keywords: ['网络', 'network', 'proxy', '代理', 'ssl', 'https'],
+                label: 'network'
+              },
+              {
+                keywords: ['性能', 'performance', 'slow', '慢', 'memory', '内存'],
+                label: 'performance'
+              },
+              {
+                keywords: ['音频', 'audio', '声音', 'sound'],
+                label: 'audio'
+              },
+              {
+                keywords: ['视频', 'video', '显示', 'display'],
+                label: 'video'
+              },
+              {
+                keywords: ['文档', 'documentation', 'readme', 'doc'],
+                label: 'documentation'
+              }
+            ];
+            
+            const labelsToAdd = [];
+            for (const rule of labelRules) {
+              if (rule.keywords.some(keyword => content.includes(keyword))) {
+                labelsToAdd.push(rule.label);
+              }
+            }
+            
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labelsToAdd
+              });
+            }
+
+      - name: Welcome First Time Contributors
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            
+            // 检查是否是首次提交issue的用户
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              creator: issue.user.login,
+              state: 'all'
+            });
+            
+            if (issues.length === 1) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `🎉 **欢迎首次贡献！**\n\n感谢您提交第一个issue！我们很高兴您选择使用并改进这个项目。\n\n**接下来会发生什么：**\n- 维护者将审查您的issue\n- 如果需要更多信息，我们会在评论中询问\n- 我们会尽快回复并提供帮助\n\n**有用的资源：**\n- [项目文档](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/master/README.md)\n- [讨论区](https://github.com/${context.repo.owner}/${context.repo.repo}/discussions)\n\n再次感谢您的贡献！ 🙏`
+              });
+            }

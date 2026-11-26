@@ -1,0 +1,214 @@
+name: Build and Publish Docker Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'versions/upstream.env'
+      - 'Dockerfile'
+      - 'root/**'
+      - '.github/workflows/docker.yml'
+    tags:
+      - 'v*'
+
+concurrency:
+  group: docker-publish
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  DOCKERHUB_REGISTRY: docker.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: DOCKERHUB
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Login to Docker Hub
+      if: vars.ENABLE_DOCKERHUB == 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.DOCKERHUB_REGISTRY }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: |
+          ghcr.io/${{ github.repository }}
+          ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }},enable=${{ vars.ENABLE_DOCKERHUB == 'true' }}
+        flavor: |
+          latest=false
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'master') || startsWith(github.ref, 'refs/tags/') }}
+
+    - name: Load upstream version state
+      run: |
+        if [ -f versions/upstream.env ]; then
+          grep -v '^#' versions/upstream.env | grep -v '^\s*$' | sed 's/"//g' >> "$GITHUB_ENV"
+        fi
+
+    - name: Build and push Docker image
+      id: build-image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          WECHAT_AMD64_URL=${{ env.WECHAT_AMD64_URL }}
+          WECHAT_ARM64_URL=${{ env.WECHAT_ARM64_URL }}
+          WECHAT_AMD64_SHA256=${{ env.WECHAT_AMD64_SHA256 }}
+          WECHAT_ARM64_SHA256=${{ env.WECHAT_ARM64_SHA256 }}
+          QQ_AMD64_URL=${{ env.QQ_AMD64_URL }}
+          QQ_ARM64_URL=${{ env.QQ_ARM64_URL }}
+          QQ_AMD64_SHA256=${{ env.QQ_AMD64_SHA256 }}
+          QQ_ARM64_SHA256=${{ env.QQ_ARM64_SHA256 }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Extract metadata for minimal image
+      id: meta-minimal
+      uses: docker/metadata-action@v5
+      with:
+        images: |
+          ghcr.io/${{ github.repository }}
+          ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }},enable=${{ vars.ENABLE_DOCKERHUB == 'true' }}
+        flavor: |
+          latest=false
+        tags: |
+          type=semver,pattern={{version}},suffix=-minimal
+          type=semver,pattern={{major}}.{{minor}},suffix=-minimal
+          type=semver,pattern={{major}},suffix=-minimal
+          type=raw,value=minimal,enable=${{ github.ref == format('refs/heads/{0}', 'master') || startsWith(github.ref, 'refs/tags/') }}
+
+    - name: Build and push minimal Docker image
+      id: build-minimal
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta-minimal.outputs.tags }}
+        labels: ${{ steps.meta-minimal.outputs.labels }}
+        build-args: |
+          INSTALL_QQ=false
+          INSTALL_PCMANFM=false
+          WECHAT_AMD64_URL=${{ env.WECHAT_AMD64_URL }}
+          WECHAT_ARM64_URL=${{ env.WECHAT_ARM64_URL }}
+          WECHAT_AMD64_SHA256=${{ env.WECHAT_AMD64_SHA256 }}
+          WECHAT_ARM64_SHA256=${{ env.WECHAT_ARM64_SHA256 }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate artifact attestation
+      if: github.event_name != 'workflow_dispatch'
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.build-image.outputs.digest }}
+        push-to-registry: true
+
+    - name: Output Docker image information
+      run: |
+        {
+          echo "## 🐳 Docker Images Published"
+          echo "### GitHub Container Registry"
+          echo "**Registry:** ${{ env.REGISTRY }}"
+          echo "**Repository:** ${{ env.IMAGE_NAME }}"
+          echo "**Full image digest:** \`${{ steps.build-image.outputs.digest }}\`"
+          echo "**Minimal image digest:** \`${{ steps.build-minimal.outputs.digest }}\`"
+          echo "**Tags (full):**"
+          echo "\`\`\`"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "\`\`\`"
+          echo "**Tags (minimal):**"
+          echo "\`\`\`"
+          echo "${{ steps.meta-minimal.outputs.tags }}"
+          echo "\`\`\`"
+
+          if [ "${{ vars.ENABLE_DOCKERHUB }}" == "true" ]; then
+            echo ""
+            echo "### Docker Hub"
+            echo "**Registry:** ${{ env.DOCKERHUB_REGISTRY }}"
+            echo "**Repository:** ${{ github.repository }}"
+            echo "**Digest:** \`${{ steps.build-image.outputs.digest }}\`"
+            echo "**Tags:**"
+            echo "\`\`\`"
+            echo "${{ steps.meta.outputs.tags }}"
+            echo "\`\`\`"
+          else
+            echo ""
+            echo "### Docker Hub"
+            echo "⚠️ **Skipped** - Docker Hub push disabled (set ENABLE_DOCKERHUB=true to enable)"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        generate_release_notes: true
+        make_latest: true
+        body: |
+          ## 🐳 Docker Images
+          
+          ### Full (WeChat + QQ + File Manager)
+          **GitHub Container Registry:**
+          ```bash
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          ```
+          
+          **Docker Hub** (if enabled):
+          ```bash
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ steps.meta.outputs.version }}
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:latest
+          ```
+          
+          ### Minimal (WeChat only)
+          ```bash
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:minimal
+          ```
+          
+          ## 🚀 Quick Start
+          **Full:**
+          ```bash
+          docker run -it -p 3001:3001 -v ./config:/config --device /dev/dri:/dev/dri ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          ```
+          
+          **Minimal:**
+          ```bash
+          docker run -it -p 3001:3001 -v ./config:/config --device /dev/dri:/dev/dri ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:minimal
+          ```
+          
+          Then visit: https://localhost:3001

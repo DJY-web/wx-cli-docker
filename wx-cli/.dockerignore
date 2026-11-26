@@ -1,0 +1,6 @@
+.git
+target
+.env
+*.toml.secret
+private
+**/__pycache__

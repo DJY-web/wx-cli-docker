@@ -1,0 +1,2 @@
+# Preserve the upstream source snapshot byte-for-byte, including its whitespace.
+third_party/wechat-selkies/** -whitespace

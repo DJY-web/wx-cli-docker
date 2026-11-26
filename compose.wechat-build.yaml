@@ -1,0 +1,10 @@
+# Optional: build the preserved desktop source instead of pulling its image.
+services:
+  wechat:
+    image: wx-cli-docker-wechat:local
+    build:
+      context: ./third_party/wechat-selkies
+      args:
+        INSTALL_QQ: "false"
+        WECHAT_AMD64_SHA256: d5b21c6e21186a58b2c2fd41712a4ef90f9452735931a6b8500e85c5b0913b0b
+        WECHAT_ARM64_SHA256: b9ee12ba417ff68840d57020ef7014abb23c7b4f4c00ce807672b100c90bc853

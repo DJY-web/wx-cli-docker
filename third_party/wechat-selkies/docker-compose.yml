@@ -1,0 +1,27 @@
+---
+services:
+  wechat-selkies:
+    build:
+      context: .
+    image: wechat-selkies:latest
+    container_name: wechat-selkies
+    hostname: ${WECHAT_HOSTNAME:-}
+    volumes:
+      - ./config:/config
+    devices:
+      - /dev/dri:/dev/dri # optional, for hardware acceleration
+    ports:
+      - "${HTTP_PORT:-3000}:3000"       # http port
+      - "${HTTPS_PORT:-3001}:3001"      # https port
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}              # set user id according to your system
+      - PGID=${PGID:-100}               # set group id according to your system
+      - CUSTOM_USER=${CUSTOM_USER:-}    # recommended to set a custom user name
+      - PASSWORD=${PASSWORD:-}          # recommended to set a password for selkies web ui
+      - ENABLE_WECHAT_NIGHTLY_RESTART=${ENABLE_WECHAT_NIGHTLY_RESTART:-false}
+      - WECHAT_NIGHTLY_STOP_TIME=${WECHAT_NIGHTLY_STOP_TIME:-23:30}
+      - WECHAT_NIGHTLY_START_TIME=${WECHAT_NIGHTLY_START_TIME:-01:30}
+      - ENABLE_WECHAT_AUTO_LOGIN=${ENABLE_WECHAT_AUTO_LOGIN:-false}
+      - AUTO_LOGIN_DELAY=${AUTO_LOGIN_DELAY:-3}
+    shm_size: "${SHM_SIZE:-1gb}"        # recommended, will improve performance

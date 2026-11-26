@@ -1,0 +1,5 @@
+FROM wx-cli-linux:local
+USER 0
+RUN apt-get update && apt-get install -y --no-install-recommends gdb python3 \
+    && rm -rf /var/lib/apt/lists/*
+USER 1000:1000

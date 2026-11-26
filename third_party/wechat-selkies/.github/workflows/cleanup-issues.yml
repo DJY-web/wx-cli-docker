@@ -1,0 +1,101 @@
+name: Close Invalid Issues
+
+on:
+  schedule:
+    # 每天运行一次，清理无效issues
+    - cron: '0 2 * * *'
+  workflow_dispatch: # 允许手动触发
+
+permissions:
+  issues: write
+
+jobs:
+  close-invalid-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close stale issues with needs-more-info label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'needs-more-info',
+              sort: 'updated',
+              direction: 'asc'
+            });
+            
+            const now = new Date();
+            const staleThreshold = 7 * 24 * 60 * 60 * 1000; // 7天
+            
+            for (const issue of issues) {
+              const updatedAt = new Date(issue.updated_at);
+              const daysSinceUpdate = Math.floor((now - updatedAt) / (24 * 60 * 60 * 1000));
+              
+              if (now - updatedAt > staleThreshold) {
+                console.log(`Closing stale issue #${issue.number} (${daysSinceUpdate} days old)`);
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `🤖 **自动关闭通知**\n\n这个issue已经标记为需要更多信息超过7天，且没有收到回复。为了保持issue列表的整洁，现在自动关闭此issue。\n\n如果您仍然遇到问题，请：\n1. 提供我们之前请求的信息\n2. 重新开启此issue或创建新的issue\n\n我们随时欢迎您提供更多详细信息！`
+                });
+                
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                  state_reason: 'not_planned'
+                });
+                
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['auto-closed']
+                });
+              }
+            }
+
+      - name: Add warning to old issues without labels
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'created',
+              direction: 'asc'
+            });
+            
+            const now = new Date();
+            const oldThreshold = 3 * 24 * 60 * 60 * 1000; // 3天
+            
+            for (const issue of issues) {
+              const createdAt = new Date(issue.created_at);
+              const isOld = now - createdAt > oldThreshold;
+              const hasTriageLabel = issue.labels.some(label => label.name === 'triage');
+              const hasNeedsInfoLabel = issue.labels.some(label => label.name === 'needs-more-info');
+              
+              if (isOld && hasTriageLabel && !hasNeedsInfoLabel) {
+                console.log(`Adding reminder to issue #${issue.number}`);
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `⏰ **提醒**\n\n这个issue已经开放3天了，但还没有被标记或分类。\n\n**维护者请注意：**\n- 请审查此issue并添加适当的标签\n- 如果需要更多信息，请添加 \`needs-more-info\` 标签\n- 如果是有效的bug或功能请求，请移除 \`triage\` 标签并添加适当的优先级标签\n\n**提交者请注意：**\n- 如果您有更多信息可以补充，请随时添加\n- 确保您已经提供了足够的详细信息来重现问题或理解功能需求`
+                });
+                
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['stale']
+                });
+              }
+            }

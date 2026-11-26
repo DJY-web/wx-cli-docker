@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+**/target
+**/dist
+**/private
+**/__pycache__
+data
+backups

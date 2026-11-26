@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "Please cite this integration and acknowledge the upstream projects in THIRD_PARTY_NOTICES.md."
+type: software
+title: "wx-cli Docker"
+abstract: "Containerized Linux WeChat and wx-cli read-only JSON, REST and SSE integration for agents."
+authors:
+  - family-names: "DJY-web"
+    website: "https://github.com/DJY-web"
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/DJY-web/wx-cli-docker"
+url: "https://github.com/DJY-web/wx-cli-docker"
+keywords:
+  - wechat
+  - wx-cli
+  - docker
+  - linux
+  - agent-tools

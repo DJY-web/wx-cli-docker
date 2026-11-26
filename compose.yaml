@@ -1,0 +1,71 @@
+name: ${COMPOSE_PROJECT_NAME:-wx-cli-docker}
+
+services:
+  wechat:
+    image: ${WECHAT_IMAGE:-ghcr.io/nickrunning/wechat-selkies@sha256:d26661c739b9592fa7d7529ba0ccd12aef21ad8e7dc68c9722dddac012797f8e}
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3001"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: ${TZ:-Asia/Tokyo}
+      CUSTOM_USER: ${WECHAT_USER:-operator}
+      PASSWORD: ${WECHAT_PASSWORD:?Run python3 scripts/init-env.py first}
+      AUTO_START_WECHAT: "true"
+      AUTO_START_QQ: "false"
+      ENABLE_WECHAT_AUTO_LOGIN: "false"
+    volumes:
+      - wechat-config:/config
+    shm_size: 1gb
+    restart: unless-stopped
+    networks: [wechat-net]
+
+  wx-cli:
+    profiles: [cli]
+    image: ${WX_CLI_IMAGE:-wx-cli-docker-cli:local}
+    build:
+      context: ./wx-cli
+      dockerfile: docker/Dockerfile
+    entrypoint: [/usr/local/bin/wx-cli-server]
+    ports:
+      - "127.0.0.1:9100:9100"
+    volumes:
+      - wechat-config:/config:ro
+      - wx-cli-state:/state
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    restart: unless-stopped
+    networks: [wx-cli-net]
+
+  wx-cli-capture:
+    profiles: [debug]
+    image: wx-cli-docker-capture:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.capture
+      args:
+        WX_CLI_BASE_IMAGE: ${WX_CLI_IMAGE:-wx-cli-docker-cli:local}
+    user: "0:0"
+    pid: "service:wechat"
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [SYS_PTRACE, DAC_OVERRIDE, CHOWN, FOWNER]
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - wechat-config:/config:ro
+      - wx-cli-state:/state
+    entrypoint: [/bin/sh, -c]
+    command: ["umask 077; wx-cli key extract --timeout 600 && chown -R 1000:1000 /state"]
+
+volumes:
+  wechat-config:
+  wx-cli-state:
+
+networks:
+  wechat-net:
+  wx-cli-net:
