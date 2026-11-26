@@ -1,0 +1,31 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: python3 scripts/check-compose.py
+      - run: python3 scripts/check-release.py
+      - run: python3 -m unittest discover -s wx-cli/tests/linux -v
+      - run: python3 -m compileall -q examples scripts
+      - run: for f in scripts/*.sh; do sh -n "$f"; done
+  wx-cli:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: wx-cli
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo apt-get update && sudo apt-get install -y libclang-dev cmake pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace -- -D warnings
+      - run: cargo test --locked --workspace
